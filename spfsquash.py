@@ -18,24 +18,26 @@ def main(argv):
     """
     p = argparse.ArgumentParser(description='Squash SPF Record')
     p.add_argument('--domain',  help='Domain name', required=True, dest='domain')
-    p.add_argument('--realspf', help='Real TXT SPF record to optimize', required=True, dest='spf')
+    p.add_argument('--origin-spf', help='Origin TXT SPF record to optimize', required=True, dest='origin_spf')
     p.add_argument('--qualifier', help='ALL Qualifier [+?~-],', default='~', dest='qualifier',
                    choices=['+', '?', '~', '-'])
     args = p.parse_args(argv)
 
-    d = SPF(domain=args.domain, qualifier=args.qualifier)
-    new_spf = d.spf_record(d.squash(args.spf))
+    d = SPF(domain=args.domain, origin_spf=args.origin_spf, qualifier=args.qualifier)
+    new_spf = d.spf_record(d.squash())
     for txt in new_spf:
         print(txt)
 
 
 class SPF:
-    def __init__(self, domain, qualifier='~'):
+    def __init__(self, domain, origin_spf, qualifier='~'):
         self.log = logging.getLogger(self.__class__.__name__)
         self.lookups = 0
         self.domain = domain
+        self.origin_spf = origin_spf
         self.qualifier = qualifier
         self.TXT_MAX_LEN = 255
+        self.QUALIFIERS = ['+', '?', '~', '-']
 
     def spf_record(self, txt):
         self.log.info('Assembling final TXT record')
@@ -53,15 +55,15 @@ class SPF:
         records.append(record)
         return records
 
-    def squash(self, record):
+    def squash(self):
         self.lookups = 0
         squashed_spf = []
-        squashed_spf.extend(sorted(list(set(self.spf(record)))))
+        squashed_spf.extend(sorted(list(set(self.spf(self.origin_spf)))))
         squashed_spf.append(self.qualifier+'all')
         self.log.info('Total lookups: {}'.format(self.lookups))
         return squashed_spf
 
-    def spf(self, domain, recurse=True):
+    def spf(self, domain, recurse=True, qualifier=''):
         self.log.info('Looking up SPF records in {}'.format(domain))
         elements = []
         for txt in self.txt(domain):
@@ -70,22 +72,31 @@ class SPF:
                 self.log.debug('Processing SPF: {}'.format(txt))
                 for element in txt.split(' ')[1:]:
                     element = element.lower()
+
+                    if element[0] in self.QUALIFIERS:
+                        qualifier = element[0]
+                        element = element[1:]
+                        self.log.debug('Found qualifier {}'.format(qualifier))
+
                     if element.startswith('include:') and recurse:
-                        elements.extend(self.spf(element[8:], recurse))
+                        elements.extend(self.spf(element[8:], recurse=recurse, qualifier=qualifier))
                     elif element.endswith('all'):
-                        self.log.debug('Ignoring {}'.format(element))
+                        self.log.debug('Ignoring mechanism {}'.format(element))
                     elif element == 'a':
                         self.log.info('Found "a" in SPF record')
-                        elements.extend(self.a(self.domain))
-                        elements.extend(self.aaaa(self.domain))
+                        elements.extend([qualifier + a for a in self.a(self.domain)])
+                        elements.extend([qualifier + a for a in self.aaaa(self.domain)])
                     elif element == 'mx':
                         self.log.info('Found "mx" in SPF record')
-                        elements.extend(self.mx(self.domain, resolve=True))
+                        elements.extend([qualifier + a for a in self.mx(self.domain, resolve=True)])
+                    elif element.startswith('redirect='):
+                        self.log.info('Found "redirect" in SPF record')
+                        return self.spf(element[9:], recurse)
                     else:
                         if element.startswith('ptr'):
                             self.log.warn('Found deprecated PTR entry {}'.format(element))
-                            self.lookups += 1
-                        elements.append(element)
+                        self.log.debug('Copying element {}{}'.format(qualifier, element))
+                        elements.append(qualifier + element)
         return elements
 
     def txt(self, domain):
