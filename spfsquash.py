@@ -90,6 +90,7 @@ class SPF:
                         self.log.info('Found "mx" in SPF record')
                         elements.extend([qualifier + a for a in self.mx(self.domain, resolve=True)])
                     elif element.startswith('redirect='):
+                        # todo: this only works if we're on the root level of recursion
                         self.log.info('Found "redirect" in SPF record')
                         return self.spf(element[9:], recurse)
                     else:
