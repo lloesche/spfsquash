@@ -1,0 +1,2 @@
+# spfsquish
+SPF record squasher
