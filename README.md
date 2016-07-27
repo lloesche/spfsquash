@@ -4,14 +4,19 @@ SPF record squasher
 ## Intro
 I ran into the problem that our company is including too many external services in our SPF record thereby exceeding the 10 lookup limit defined in RFC4408.
 
-To work around the problem I hacked up this script which takes an invalid/too long SPF record ans squashes it into a shorter - hopefully valid - record. It does this by traversing all a, mx, include and redirect statements and combinding them into a single record.
+To work around the problem I hacked up this script which takes an invalid/too long SPF record called the origin and squashes it into a shorter - hopefully valid - record. It does this by traversing all a, mx, include and redirect statements and combinding them into a single record.
 The record is split along 255 character boundaries as to not exceed the TXT record character limit.
 
 In accordance with [RFC 4408 Section 3.1.3](https://tools.ietf.org/html/rfc4408#section-3.1.3) these multiple strings get concatenated into a single string again on the mail server side.
 
+## Install
+```
+$ sudo pip3 install -r requirements.txt
+```
+
 ## Usage
 ```
-usage: spfsquash.py [-h] --domain DOMAIN --origin-spf ORIGIN_SPF
+usage: spfsquash [-h] --domain DOMAIN --origin-spf ORIGIN_SPF
                     [--qualifier {+,?,~,-}]
 
 Squash SPF Record
@@ -27,7 +32,7 @@ optional arguments:
 
 #### Example
 ```
-$ ./spfsquash.py --domain mesosphere.com --origin-spf _origin-spf.mesosphere.com --qualifier -
+$ spfsquash --domain mesosphere.com --origin-spf _origin-spf.mesosphere.com --qualifier -
 ```
 
 ## TODO
